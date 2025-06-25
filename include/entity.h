@@ -2,6 +2,8 @@
 
 #include "common.h"
 #include "transform.h"
+#include <vector>
+#include <memory>
 
 
 typedef VkCommandBuffer CommandBuffer;
@@ -12,12 +14,29 @@ namespace MiniEngine
     class Material;
     struct Frame;
     struct Runtime;
+    class PropertyList;
 
-    class Entity final 
+    class Entity 
     {
     public:
-        explicit Entity( const Runtime& i_runtime ) : m_runtime( i_runtime ){};
-        ~Entity        () = default;
+        // Enum for different entity class types (needed for XML parser)
+        enum class EClassType {
+            EScene = 0,
+            EMesh,
+            EBSDF,
+            EPhaseFunction,
+            EEmitter,
+            EMedium,
+            ECamera,
+            EIntegrator,
+            ESampler,
+            ETest,
+            EReconstructionFilter,
+            EClassTypeCount
+        };
+
+        explicit Entity( const Runtime& i_runtime ) : m_runtime( i_runtime ), m_classType(EClassType::EMesh){};
+        virtual ~Entity() = default;
     
         bool initialize();
 
@@ -26,6 +45,18 @@ namespace MiniEngine
         static std::shared_ptr<Entity> createEntity(  const Runtime& i_runtime, const pugi::xml_node& i_node, const uint32_t i_id );
 
         void draw( CommandBuffer& i_command_buffer,  const Frame& i_frame );
+
+        // Methods needed for XML parser
+        virtual void activate() {}
+        virtual void addChild(std::shared_ptr<Entity> child);
+        virtual void setParent(std::shared_ptr<Entity> parent);
+        
+        EClassType getClassType() const { return m_classType; }
+        void setClassType(EClassType type) { m_classType = type; }
+        
+        static const char* classTypeName(EClassType type);
+        
+        virtual std::string toString() const { return "Entity"; }
 
         inline Transform& getTransform()
        {
@@ -41,6 +72,11 @@ namespace MiniEngine
        {
            return m_entity_offset;
        }
+
+    protected:
+        EClassType m_classType;
+        std::vector<std::shared_ptr<Entity>> m_children;
+        std::weak_ptr<Entity> m_parent;
 
     private:
         Entity( const Entity& ) = delete;

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.11)
 
-project(Practica5)
+project(RA2_Practica2)
 
 
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
@@ -26,7 +26,7 @@ include_directories(
 	)
 
 
-add_executable(Practica5 
+add_executable(Practica5
 #INCLUDES
 include/defines.h
 include/common.h
@@ -37,7 +37,6 @@ include/light.h
 include/material.h
 include/entity.h
 include/meshRegistry.h
-include/material.h
 include/diffuse.h
 include/microfacets.h
 include/transform.h
@@ -51,6 +50,7 @@ include/vulkan/rendererVK.h
 include/vulkan/deviceVK.h
 include/vulkan/windowVK.h
 include/vulkan/meshVK.h
+include/vulkan/extensionsVK.h
 
 #render passes
 include/vulkan/renderPassVK.h
@@ -75,6 +75,7 @@ src/transform.cpp
 src/meshRegistry.cpp
 src/shaderRegistry.cpp
 src/runtime.cpp
+src/extensionsVK.cpp
 
 # VULKAN
 src/vulkan/utilsVK.cpp

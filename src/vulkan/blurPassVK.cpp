@@ -1,6 +1,6 @@
 #include "common.h"
 #include "vulkan/utilsVK.h"
-#include "vulkan/compositionPassVK.h"
+#include "vulkan/blurPassVK.h"
 #include "vulkan/rendererVK.h"
 #include "vulkan/deviceVK.h"
 #include "vulkan/windowVK.h"
@@ -14,20 +14,14 @@
 using namespace MiniEngine;
 
 
-CompositionPassVK::CompositionPassVK(                             
+BlurPassVK::BlurPassVK(                             
     const Runtime& i_runtime,
-    const ImageBlock& i_in_color_attachment,
-    const ImageBlock& i_in_position_depth_attachment,
-    const ImageBlock& i_in_normal_attachment,
-    const ImageBlock& i_in_material_attachment,
-    const std::array<ImageBlock, 3>& i_output_swap_images 
-                          ) :
+    const ImageBlock& i_in_texture,
+    const ImageBlock& i_out_attachment
+    ) :
     RenderPassVK( i_runtime ),
-    m_in_color_attachment         ( i_in_color_attachment     ),
-    m_in_position_depth_attachment( i_in_position_depth_attachment ),
-    m_in_normal_attachment        ( i_in_normal_attachment    ),
-    m_in_material_attachment      ( i_in_material_attachment  ),
-    m_output_swap_images( i_output_swap_images ) 
+    m_in_texture(i_in_texture),
+    m_out_attachment(i_out_attachment)
 {
     for( auto cmd : m_command_buffer )
     {
@@ -35,11 +29,11 @@ CompositionPassVK::CompositionPassVK(
     }
 }
 
-CompositionPassVK::~CompositionPassVK()
+BlurPassVK::~BlurPassVK()
 {
 }
 
-bool CompositionPassVK::initialize()
+bool BlurPassVK::initialize()
 {
     RendererVK& renderer = *m_runtime.m_renderer;
 
@@ -50,9 +44,9 @@ bool CompositionPassVK::initialize()
 
     //SHADER STAGES
     {
-        { // difuse
-            VkShaderModule vert_module = m_runtime.m_shader_registry->loadShader( "./shaders/composition_v.spv", VK_SHADER_STAGE_VERTEX_BIT   );
-            VkShaderModule frag_module = m_runtime.m_shader_registry->loadShader( "./shaders/composition_f.spv", VK_SHADER_STAGE_FRAGMENT_BIT );
+        {
+            VkShaderModule vert_module = m_runtime.m_shader_registry->loadShader( "./shaders/fullscreen_quad_v.spv", VK_SHADER_STAGE_VERTEX_BIT   );
+            VkShaderModule frag_module = m_runtime.m_shader_registry->loadShader( "./shaders/gaussian_kernel_3x3_f.spv", VK_SHADER_STAGE_FRAGMENT_BIT );
 
             assert( VK_NULL_HANDLE != vert_module && VK_NULL_HANDLE != frag_module );
 
@@ -82,7 +76,7 @@ bool CompositionPassVK::initialize()
     commandBufferAllocateInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     commandBufferAllocateInfo.commandPool        = renderer.getDevice()->getCommandPool();
     commandBufferAllocateInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    commandBufferAllocateInfo.commandBufferCount = 3;
+    commandBufferAllocateInfo.commandBufferCount = renderer.getWindow().getImageCount();
     
     vkAllocateCommandBuffers( renderer.getDevice()->getLogicalDevice(), &commandBufferAllocateInfo, m_command_buffer.data() );
 
@@ -90,7 +84,7 @@ bool CompositionPassVK::initialize()
 }
 
 
-void CompositionPassVK::shutdown()
+void BlurPassVK::shutdown()
 {
     RendererVK& renderer = *m_runtime.m_renderer;
 
@@ -111,7 +105,7 @@ void CompositionPassVK::shutdown()
 }
 
 
-VkCommandBuffer CompositionPassVK::draw( const Frame& i_frame)
+VkCommandBuffer BlurPassVK::draw( const Frame& i_frame)
 {
     RendererVK& renderer = *m_runtime.m_renderer;
 
@@ -136,27 +130,27 @@ VkCommandBuffer CompositionPassVK::draw( const Frame& i_frame)
     render_pass_info.renderArea.offset    = { 0, 0 };
     render_pass_info.renderArea.extent    = { width, height };
 
-    VkClearValue clear_values;
-    clear_values.color = { { 0.0f, 0.0f, 0.2f, 1.0f } };
+    std::array<VkClearValue, 1> clear_values;
+    clear_values[ 0 ].color          = { { 1.0f, 0.0f, 0.0f, 0.0f } };
 
-    render_pass_info.clearValueCount = 1;
-    render_pass_info.pClearValues    = &clear_values;
+    render_pass_info.clearValueCount = static_cast<uint32_t>( clear_values.size() );
+    render_pass_info.pClearValues    = clear_values.data();
 
     if( vkBeginCommandBuffer( current_cmd, &begin_info ) != VK_SUCCESS )
     {
         throw MiniEngineException( "failed to begin recording command buffer!" );
     }
     
-    UtilsVK::beginRegion( current_cmd, "Composition Pass", Vector4f( 0.5f, 0.0f, 0.0f, 1.0f ) );
+    UtilsVK::beginRegion( current_cmd, "GBuffer Pass", Vector4f( 0.0f, 0.5f, 0.0f, 1.0f ) );
     vkCmdBeginRenderPass( current_cmd, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE );
 
-    vkCmdBindPipeline( current_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_composition_pipeline );
-    vkCmdBindDescriptorSets( current_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline_layouts, 0, 1, &m_descriptor_sets[ renderer.getWindow().getCurrentImageId() ].m_textures_descriptor, 0, NULL);
-				
-    m_plane->draw( current_cmd, 0 );
-    
-    vkCmdEndRenderPass( current_cmd );
-    UtilsVK::endRegion( current_cmd );
+    vkCmdBindPipeline(current_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_composition_pipeline);
+    vkCmdBindDescriptorSets(current_cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline_layouts, 0, 1, &m_descriptor_sets[renderer.getWindow().getCurrentImageId()].m_textures_descriptor, 0, NULL);
+
+    m_plane->draw(current_cmd, 0);
+
+    vkCmdEndRenderPass(current_cmd);
+    UtilsVK::endRegion(current_cmd);
 
     if( vkEndCommandBuffer( current_cmd ) != VK_SUCCESS )
     {
@@ -168,52 +162,51 @@ VkCommandBuffer CompositionPassVK::draw( const Frame& i_frame)
 
 
 
-void CompositionPassVK::createFbo()
+void BlurPassVK::createFbo()
 {
     RendererVK& renderer = *m_runtime.m_renderer;
 
     uint32_t width = 0, height = 0;
-    renderer.getWindow().getWindowSize( width, height );
+    renderer.getWindow().getWindowSize(width, height);
 
-    for( size_t i = 0; i < m_fbos.size(); i++ )
+    for (size_t i = 0; i < m_fbos.size(); i++)
     {
         std::array<VkImageView, 1> attachments;
-        attachments[ 0 ] = m_output_swap_images[ i ].m_image_view; // Color attachment is the view of the swapchain image
+        attachments[0] = m_out_attachment.m_image_view; // Color attachment is the view of the swapchain image
 
         VkFramebufferCreateInfo framebuffer_create_info = {};
         framebuffer_create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        // All frame buffers use the same renderpass setup
-        framebuffer_create_info.renderPass      = m_render_pass;
-        framebuffer_create_info.attachmentCount = static_cast< uint32_t >( attachments.size() );
-        framebuffer_create_info.pAttachments    = attachments.data();
-        framebuffer_create_info.width           = width;
-        framebuffer_create_info.height          = height;
-        framebuffer_create_info.layers          = 1;
-        // Create the framebuffer
+        framebuffer_create_info.renderPass = m_render_pass;
+        framebuffer_create_info.attachmentCount = static_cast<uint32_t>(attachments.size());
+        framebuffer_create_info.pAttachments = attachments.data();
+        framebuffer_create_info.width = width;
+        framebuffer_create_info.height = height;
+        framebuffer_create_info.layers = 1;
 
-        if( vkCreateFramebuffer( renderer.getDevice()->getLogicalDevice(), &framebuffer_create_info, nullptr, &m_fbos[ i ] ) )
+        if (vkCreateFramebuffer(renderer.getDevice()->getLogicalDevice(), &framebuffer_create_info, nullptr, &m_fbos[i]) != VK_SUCCESS)
         {
-            throw MiniEngineException( "failed to create fbos" );
+            throw MiniEngineException("failed to create fbos");
         }
     }
 }
 
 
 
-void CompositionPassVK::createRenderPass()
+void BlurPassVK::createRenderPass()
 {
     RendererVK& renderer = *m_runtime.m_renderer;
 
     std::array<VkAttachmentDescription, 1> attachments = {};
-    // Color attachment
-    attachments[ 0 ].format         = m_output_swap_images[ 0 ].m_format;
+
+    // Output attachment (same configuration as in ssao pass)
+    attachments[ 0 ].format         = m_out_attachment.m_format;
     attachments[ 0 ].samples        = VK_SAMPLE_COUNT_1_BIT;
     attachments[ 0 ].loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
     attachments[ 0 ].storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
     attachments[ 0 ].stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     attachments[ 0 ].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     attachments[ 0 ].initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachments[ 0 ].finalLayout    = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    attachments[ 0 ].finalLayout    = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
     VkAttachmentReference color_reference = {};
     color_reference.attachment = 0;
@@ -237,6 +230,7 @@ void CompositionPassVK::createRenderPass()
     dependencies[ 0 ].srcStageMask      = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     dependencies[ 0 ].dstStageMask      = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     dependencies[ 0 ].srcAccessMask     = 0;
+    dependencies[ 0 ].dstAccessMask     = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
     VkRenderPassCreateInfo render_pass_info = {};
     render_pass_info.sType            = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -254,7 +248,7 @@ void CompositionPassVK::createRenderPass()
 }
 
 
-void CompositionPassVK::createPipelines()
+void BlurPassVK::createPipelines()
 {
     RendererVK& renderer = *m_runtime.m_renderer;
     
@@ -262,6 +256,9 @@ void CompositionPassVK::createPipelines()
     binding_vertex_descrition.binding   = 0;
     binding_vertex_descrition.stride    = sizeof(Vertex);
     binding_vertex_descrition.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    // Attributes from the input mesh: Position, normal and UV
+    // -> The input mesh is a simple quad
 
     std::array<VkVertexInputAttributeDescription, 3> attribute_descriptions{};
 
@@ -417,40 +414,16 @@ void CompositionPassVK::createPipelines()
 }
 
 
-void CompositionPassVK::createDescriptorLayout()
+void BlurPassVK::createDescriptorLayout()
 {
-    std::array<VkDescriptorSetLayoutBinding, 5> layout_bindings;
+    std::array<VkDescriptorSetLayoutBinding, 1> layout_bindings;
 
-    ////// PER FRAME
+    // Input texture to blur
     layout_bindings[ 0 ] = {};
     layout_bindings[ 0 ].binding                      = 0;
     layout_bindings[ 0 ].descriptorCount              = 1;
-    layout_bindings[ 0 ].descriptorType               = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    layout_bindings[ 0 ].descriptorType               = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     layout_bindings[ 0 ].stageFlags                   = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    layout_bindings[ 1 ] = {};
-    layout_bindings[ 1 ].binding                      = 1;
-    layout_bindings[ 1 ].descriptorCount              = 1;
-    layout_bindings[ 1 ].descriptorType               = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    layout_bindings[ 1 ].stageFlags                   = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    layout_bindings[ 2 ] = {};
-    layout_bindings[ 2 ].binding                      = 2;
-    layout_bindings[ 2 ].descriptorCount              = 1;
-    layout_bindings[ 2 ].descriptorType               = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    layout_bindings[ 2 ].stageFlags                   = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    layout_bindings[ 3 ] = {};
-    layout_bindings[ 3 ].binding                      = 3;
-    layout_bindings[ 3 ].descriptorCount              = 1;
-    layout_bindings[ 3 ].descriptorType               = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    layout_bindings[ 3 ].stageFlags                   = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    layout_bindings[ 4 ] = {};
-    layout_bindings[ 4 ].binding                      = 4;
-    layout_bindings[ 4 ].descriptorCount              = 1;
-    layout_bindings[ 4 ].descriptorType               = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    layout_bindings[ 4 ].stageFlags                   = VK_SHADER_STAGE_FRAGMENT_BIT;
 
     VkDescriptorSetLayoutCreateInfo set_attachment_color_info = {};
     set_attachment_color_info.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -466,12 +439,11 @@ void CompositionPassVK::createDescriptorLayout()
 }
 
 
-void CompositionPassVK::createDescriptors()
+void BlurPassVK::createDescriptors()
 {
-    //create a descriptor pool that will hold 10 uniform buffers
+    // Create descriptor pool for image samplers only
     std::vector<VkDescriptorPoolSize> sizes =
     {
-        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER        , 10 },
         { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10 }
     };
 
@@ -487,91 +459,33 @@ void CompositionPassVK::createDescriptors()
         throw MiniEngineException( "Error creating descriptor pool" );
     }
 
-    //create descriptors for the global buffers
+    //create descriptors for the input texture
     for( uint32_t i = 0; i < m_runtime.m_renderer->getWindow().getImageCount(); i++ )
     {   
-        //globals per frame
-        VkDescriptorSetAllocateInfo alloc_per_frame_info = {};
-        alloc_per_frame_info.pNext                = nullptr;
-        alloc_per_frame_info.sType                = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        alloc_per_frame_info.descriptorPool       = m_descriptor_pool;
-        alloc_per_frame_info.descriptorSetCount   = 1;
-        alloc_per_frame_info.pSetLayouts          = &m_descriptor_set_layout;
+        VkDescriptorSetAllocateInfo alloc_info = {};
+        alloc_info.pNext                = nullptr;
+        alloc_info.sType                = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        alloc_info.descriptorPool       = m_descriptor_pool;
+        alloc_info.descriptorSetCount   = 1;
+        alloc_info.pSetLayouts          = &m_descriptor_set_layout;
 
-        vkAllocateDescriptorSets( m_runtime.m_renderer->getDevice()->getLogicalDevice(), &alloc_per_frame_info, &m_descriptor_sets[ i ].m_textures_descriptor );
+        vkAllocateDescriptorSets( m_runtime.m_renderer->getDevice()->getLogicalDevice(), &alloc_info, &m_descriptor_sets[ i ].m_textures_descriptor );
 
-        //information about the buffer we want to point at in the descriptor
-        VkDescriptorBufferInfo binfo;
-        binfo.buffer    = m_runtime.getPerFrameBuffer()[ i ];
-        binfo.offset    = 0;
-        binfo.range     = sizeof( PerFrameData );
+        // Input texture for blurring
+        VkDescriptorImageInfo image_info;
+        image_info.sampler     = m_in_texture.m_sampler;
+        image_info.imageView   = m_in_texture.m_image_view;
+        image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-        std::array<VkDescriptorImageInfo, 4> image_infos;
+        VkWriteDescriptorSet set_write = {};
+        set_write.sType             = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        set_write.pNext             = nullptr;
+        set_write.dstBinding        = 0;
+        set_write.dstSet            = m_descriptor_sets[ i ].m_textures_descriptor;
+        set_write.descriptorCount   = 1;
+        set_write.descriptorType    = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        set_write.pImageInfo        = &image_info;
 
-        image_infos[ 0 ].sampler     = m_in_color_attachment.m_sampler;
-        image_infos[ 0 ].imageView   = m_in_color_attachment.m_image_view;
-        image_infos[ 0 ].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        image_infos[ 1 ].sampler     = m_in_position_depth_attachment.m_sampler;
-        image_infos[ 1 ].imageView   = m_in_position_depth_attachment.m_image_view;
-        image_infos[ 1 ].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        image_infos[ 2 ].sampler     = m_in_normal_attachment.m_sampler;
-        image_infos[ 2 ].imageView   = m_in_normal_attachment.m_image_view;
-        image_infos[ 2 ].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        image_infos[ 3 ].sampler     = m_in_material_attachment.m_sampler;
-        image_infos[ 3 ].imageView   = m_in_material_attachment.m_image_view;
-        image_infos[ 3 ].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        std::array<VkWriteDescriptorSet, 5> set_write;
-
-        set_write[ 0 ]                   = {};
-        set_write[ 0 ].sType             = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        set_write[ 0 ].pNext             = nullptr;
-        set_write[ 0 ].dstBinding        = 0;
-        set_write[ 0 ].dstSet            = m_descriptor_sets[ i ].m_textures_descriptor;
-        set_write[ 0 ].descriptorCount   = 1;
-        set_write[ 0 ].descriptorType    = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        set_write[ 0 ].pImageInfo        = nullptr;
-        set_write[ 0 ].pBufferInfo       = &binfo;
-
-        set_write[ 1 ]                   = {};
-        set_write[ 1 ].sType             = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        set_write[ 1 ].pNext             = nullptr;
-        set_write[ 1 ].dstBinding        = 1;
-        set_write[ 1 ].dstSet            = m_descriptor_sets[ i ].m_textures_descriptor;
-        set_write[ 1 ].descriptorCount   = 1;
-        set_write[ 1 ].descriptorType    = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        set_write[ 1 ].pImageInfo        = &image_infos[ 0 ];
-
-        set_write[ 2 ]                   = {};
-        set_write[ 2 ].sType             = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        set_write[ 2 ].pNext             = nullptr;
-        set_write[ 2 ].dstBinding        = 2;
-        set_write[ 2 ].dstSet            = m_descriptor_sets[ i ].m_textures_descriptor;
-        set_write[ 2 ].descriptorCount   = 1;
-        set_write[ 2 ].descriptorType    = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        set_write[ 2 ].pImageInfo        = &image_infos[ 1 ];
-
-        set_write[ 3 ]                   = {};
-        set_write[ 3 ].sType             = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        set_write[ 3 ].pNext             = nullptr;
-        set_write[ 3 ].dstBinding        = 3;
-        set_write[ 3 ].dstSet            = m_descriptor_sets[ i ].m_textures_descriptor;
-        set_write[ 3 ].descriptorCount   = 1;
-        set_write[ 3 ].descriptorType    = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        set_write[ 3 ].pImageInfo        = &image_infos[ 2 ];
-
-        set_write[ 4 ]                   = {};
-        set_write[ 4 ].sType             = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        set_write[ 4 ].pNext             = nullptr;
-        set_write[ 4 ].dstBinding        = 4;
-        set_write[ 4 ].dstSet            = m_descriptor_sets[ i ].m_textures_descriptor;
-        set_write[ 4 ].descriptorCount   = 1;
-        set_write[ 4 ].descriptorType    = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        set_write[ 4 ].pImageInfo        = &image_infos[ 3 ];
-
-        vkUpdateDescriptorSets( m_runtime.m_renderer->getDevice()->getLogicalDevice(), set_write.size(), set_write.data(), 0, nullptr );
+        vkUpdateDescriptorSets( m_runtime.m_renderer->getDevice()->getLogicalDevice(), 1, &set_write, 0, nullptr );
     }
 }

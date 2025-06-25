@@ -68,6 +68,36 @@ void Entity::draw( CommandBuffer& i_command_buffer, const Frame& i_frame )
     m_mesh->draw( i_command_buffer, m_entity_offset );
 }
 
+void Entity::addChild(std::shared_ptr<Entity> child)
+{
+    if (child) {
+        m_children.push_back(child);
+    }
+}
+
+void Entity::setParent(std::shared_ptr<Entity> parent)
+{
+    m_parent = parent;
+}
+
+const char* Entity::classTypeName(EClassType type)
+{
+    switch (type) {
+        case EClassType::EScene: return "scene";
+        case EClassType::EMesh: return "mesh";
+        case EClassType::EBSDF: return "bsdf";
+        case EClassType::EPhaseFunction: return "phase";
+        case EClassType::EEmitter: return "emitter";
+        case EClassType::EMedium: return "medium";
+        case EClassType::ECamera: return "camera";
+        case EClassType::EIntegrator: return "integrator";
+        case EClassType::ESampler: return "sampler";
+        case EClassType::ETest: return "test";
+        case EClassType::EReconstructionFilter: return "rfilter";
+        default: return "unknown";
+    }
+}
+
 
 
 

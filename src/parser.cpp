@@ -188,30 +188,42 @@ namespace MiniEngine
                     check_attributes( node, { "type" } );
 
                     /* This is an object, first instantiate it */
-                  /*  result = NoriObjectFactory::createInstance(
-                        node.attribute( "type" ).value(),
-                        propList
-                    );*/ // CARCASTILLO ADD HERE THE CREATION
+                    // Create a basic entity for now - this would be replaced with proper factory
+                    // result = NoriObjectFactory::createInstance(
+                    //     node.attribute( "type" ).value(),
+                    //     propList
+                    // );
+                    
+                    // For now, create a basic entity
+                    // This should be replaced with proper factory implementation
+                    // result = std::make_shared<Entity>();
+                    
+                    // TODO: Implement proper object factory based on node.attribute("type").value()
+                    // For now, just return nullptr to indicate object creation needs implementation
+                    result = nullptr;
 
-                    if( static_cast<int32_t>(result->getClassType()) != ( int )tag )
+                    if( result && static_cast<int32_t>(result->getClassType()) != ( int )tag )
                     {
                         throw MiniEngineException(
                             "Unexpectedly constructed an object "
                             "of type <%s> (expected type <%s>): %s",
                             Entity::classTypeName( result->getClassType() ),
                             Entity::classTypeName( ( Entity::EClassType ) tag ),
-                            result->toString() );
+                            result->toString().c_str() );
                     }
 
                     /* Add all children */
-                    for( auto ch : children )
+                    if( result )
                     {
-                        result->addChild( ch );
-                        ch->setParent( result );
-                    }
+                        for( auto ch : children )
+                        {
+                            result->addChild( ch );
+                            ch->setParent( result );
+                        }
 
-                    /* Activate / configure the object */
-                    result->activate();
+                        /* Activate / configure the object */
+                        result->activate();
+                    }
                 }
                 else
                 {
@@ -242,29 +254,29 @@ namespace MiniEngine
                             list.setBoolean( node.attribute( "name" ).value(), toBool( node.attribute( "value" ).value() ) );
                         }
                         break;
-                     /*   case EPoint:
+                        case EPoint:
                         {
                             check_attributes( node, { "name", "value" } );
-                            list.setPoint( node.attribute( "name" ).value(), Point3f( toVector3f( node.attribute( "value" ).value() ) ) );
+                            list.setPoint( node.attribute( "name" ).value(), toVector3f( node.attribute( "value" ).value() ) );
                         }
                         break;
                         case EVector:
                         {
                             check_attributes( node, { "name", "value" } );
-                            list.setVector( node.attribute( "name" ).value(), Vector3f( toVector3f( node.attribute( "value" ).value() ) ) );
+                            list.setVector( node.attribute( "name" ).value(), toVector3f( node.attribute( "value" ).value() ) );
                         }
                         break;
                         case EColor:
                         {
                             check_attributes( node, { "name", "value" } );
-                            list.setColor( node.attribute( "name" ).value(), Color3f( toVector3f( node.attribute( "value" ).value() ).array() ) );
+                            list.setColor( node.attribute( "name" ).value(), toVector3f( node.attribute( "value" ).value() ) );
                         }
                         break;
                         case ETransform:
                         {
                             check_attributes( node, { "name" } );
                             list.setTransform( node.attribute( "name" ).value(), transform.matrix() );
-                        }*/
+                        }
                         break;
                         case ETranslate:
                         {
@@ -308,9 +320,9 @@ namespace MiniEngine
                             Eigen::Vector3f target = toVector3f( node.attribute( "target" ).value() );
                             Eigen::Vector3f up = toVector3f( node.attribute( "up" ).value() );
 
-                            Vector3f dir = ( target - origin ).normalized();
-                            Vector3f left = up.normalized().cross( dir ).normalized();
-                            Vector3f newUp = dir.cross( left ).normalized();
+                            Eigen::Vector3f dir = ( target - origin ).normalized();
+                            Eigen::Vector3f left = up.normalized().cross( dir ).normalized();
+                            Eigen::Vector3f newUp = dir.cross( left ).normalized();
 
                             Eigen::Matrix4f trafo;
                             trafo << left, newUp, dir, origin,

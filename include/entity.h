@@ -68,6 +68,11 @@ namespace MiniEngine
            return *m_material;
        }
 
+       inline MeshVK& getMesh() const
+       {
+           return *m_mesh;
+       }
+
        inline uint32_t getEntityOffset() const
        {
            return m_entity_offset;

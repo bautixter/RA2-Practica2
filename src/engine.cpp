@@ -24,6 +24,7 @@
 #include "vulkan/deviceVK.h"
 #include "vulkan/utilsVK.h"
 #include "vulkan/shadowPassVK.h"
+#include "vulkan/meshVK.h"
 
 // defines for camera rotation
 
@@ -180,6 +181,24 @@ void Engine::shutdown()
     m_runtime.m_shader_registry->shutdown();
 
     m_runtime.m_renderer->shutdown();
+
+    // TLAS Destruction
+    
+    if (m_runtime.m_tlas)
+    {
+        vkDestroyAccelerationStructure(renderer.getDevice()->getLogicalDevice(), *m_runtime.m_tlas, nullptr);
+        m_runtime.m_tlas.reset();
+    }
+    if (m_runtime.m_tlas_buffer)
+    {
+        vkDestroyBuffer(renderer.getDevice()->getLogicalDevice(), *m_runtime.m_tlas_buffer, nullptr);
+        m_runtime.m_tlas_buffer.reset();
+    }
+    if (m_runtime.m_tlas_memory)
+    {
+        vkFreeMemory(renderer.getDevice()->getLogicalDevice(), *m_runtime.m_tlas_memory, nullptr);
+        m_runtime.m_tlas_memory.reset();
+    }
 }
 
 
@@ -366,7 +385,33 @@ void Engine::updateGlobalBuffers()
 
     }
 
-    //material buffers
+    // TLAS Setup
+    // ------------------------------------------------------------------------------------
+
+    std::vector<Matrix4f> transformMatrices;
+    std::vector<VkAccelerationStructureKHR> blasVector;
+
+    for (uint32_t idx = 0; idx < m_scene->getMeshes().size(); idx++)
+    {
+        auto& entity = m_scene->getMeshes()[ idx ];
+        const auto& mesh = entity->getMesh();
+
+        transformMatrices.push_back(entity->getTransform().getTransform());
+        blasVector.push_back(mesh.getBlas());
+    }
+
+    MiniEngine::UtilsVK::createTLAS(
+        *m_runtime.m_renderer->getDevice(),
+        transformMatrices,
+        blasVector,
+        *m_runtime.m_tlas,
+        *m_runtime.m_tlas_buffer,
+        *m_runtime.m_tlas_memory
+    );
+
+    // Material Buffers
+    // ------------------------------------------------------------------------------------
+
     void* data;
     vkMapMemory( m_runtime.m_renderer->getDevice()->getLogicalDevice(), m_runtime.m_per_frame_buffer_memory[ m_current_frame  % 3 ], 0, sizeof( PerFrameData ), 0, &data );
 

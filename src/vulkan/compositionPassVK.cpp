@@ -421,7 +421,7 @@ void CompositionPassVK::createPipelines()
 
 void CompositionPassVK::createDescriptorLayout()
 {
-    std::array<VkDescriptorSetLayoutBinding, 6> layout_bindings;
+    std::array<VkDescriptorSetLayoutBinding, 7> layout_bindings;
 
     ////// PER FRAME
     layout_bindings[ 0 ] = {};
@@ -460,6 +460,13 @@ void CompositionPassVK::createDescriptorLayout()
     layout_bindings[ 5 ].descriptorType               = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     layout_bindings[ 5 ].stageFlags                   = VK_SHADER_STAGE_FRAGMENT_BIT;
 
+
+    layout_bindings[ 5 ] = {};
+    layout_bindings[ 5 ].binding                      = 6;
+    layout_bindings[ 5 ].descriptorCount              = 1;
+    layout_bindings[ 5 ].descriptorType               = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+    layout_bindings[ 5 ].stageFlags                   = VK_SHADER_STAGE_FRAGMENT_BIT;
+
     VkDescriptorSetLayoutCreateInfo set_attachment_color_info = {};
     set_attachment_color_info.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     set_attachment_color_info.pNext        = nullptr;
@@ -494,6 +501,12 @@ void CompositionPassVK::createDescriptors()
     {
         throw MiniEngineException( "Error creating descriptor pool" );
     }
+
+    // TLAS Common Descriptor Set
+    VkWriteDescriptorSetAccelerationStructureKHR writeDescriptorSetAccelerationStructure = {};
+    writeDescriptorSetAccelerationStructure.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+    writeDescriptorSetAccelerationStructure.accelerationStructureCount = 1;
+    writeDescriptorSetAccelerationStructure.pAccelerationStructures = m_runtime.m_tlas.get();
 
     //create descriptors for the global buffers
     for( uint32_t i = 0; i < m_runtime.m_renderer->getWindow().getImageCount(); i++ )
@@ -592,6 +605,15 @@ void CompositionPassVK::createDescriptors()
         set_write[ 5 ].descriptorCount   = 1;
         set_write[ 5 ].descriptorType    = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         set_write[ 5 ].pImageInfo        = &image_infos[ 4 ];
+
+        set_write[ 6 ]                   = {};
+        set_write[ 6 ].sType             = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        set_write[ 6 ].pNext             = &writeDescriptorSetAccelerationStructure;
+        set_write[ 6 ].dstBinding        = 6;
+        set_write[ 6 ].dstSet            = m_descriptor_sets[ i ].m_textures_descriptor;
+        set_write[ 6 ].descriptorCount   = 1;
+        set_write[ 6 ].descriptorType    = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+        set_write[ 6 ].pImageInfo        = nullptr;
 
         vkUpdateDescriptorSets( m_runtime.m_renderer->getDevice()->getLogicalDevice(), set_write.size(), set_write.data(), 0, nullptr );
     }

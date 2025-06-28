@@ -11,10 +11,12 @@ namespace MiniEngine
 
     struct Runtime
     {
-        std::unique_ptr<RendererVK>     m_renderer;
-        std::unique_ptr<ShaderRegistry> m_shader_registry;
-        std::unique_ptr<MeshRegistry>   m_mesh_registry;
-        
+        std::unique_ptr<RendererVK>                 m_renderer;
+        std::unique_ptr<ShaderRegistry>             m_shader_registry;
+        std::unique_ptr<MeshRegistry>               m_mesh_registry;
+        std::unique_ptr<VkAccelerationStructureKHR> m_tlas;
+        std::unique_ptr<VkBuffer>                   m_tlas_buffer;
+        std::unique_ptr<VkDeviceMemory>             m_tlas_memory;
 
         inline const std::array<VkBuffer, kMAX_NUMBER_OF_FRAMES> getPerFrameBuffer() const
         {

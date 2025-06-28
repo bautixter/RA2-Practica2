@@ -3,6 +3,7 @@
 #include "vulkan/deviceVK.h"
 #include "vulkan/rendererVK.h"
 #include "vulkan/windowVK.h"
+#include "vulkan/extensionsVK.h"
 
 using namespace MiniEngine;
 
@@ -85,7 +86,9 @@ bool RendererVK::initialize()
     m_device->createPhysicalDevice  ();
     m_device->createDevice          ();
     m_window->createSwapChain       ();
-    m_device->createCommandPool     (); 
+    m_device->createCommandPool     ();
+
+    loadExtensions(m_device->getLogicalDevice(), m_instance);
 
     return true;
 }

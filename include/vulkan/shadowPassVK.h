@@ -85,7 +85,7 @@ namespace MiniEngine
             VkPipelineLayout                                 m_pipeline_layouts;        // Layout for pipeline descriptors.
             std::array<VkDescriptorSetLayout, 2>             m_descriptor_set_layout;   // Descriptor set layouts (frame + object).
             std::array<DescriptorsSets, 3>                   m_descriptor_sets;         // Descriptor sets for triple buffering.
-            std::array<VkPipelineShaderStageCreateInfo, 1>   m_shader_stages;           // Shader stages (likely just vertex shader).
+            std::array<VkPipelineShaderStageCreateInfo, 2>   m_shader_stages;           // Shader stages (vertex + geometry).
         };
 
         // Private Members

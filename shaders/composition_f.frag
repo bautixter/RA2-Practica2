@@ -4,9 +4,14 @@
 #define INV_PI 0.31830988618
 #define PI   3.14159265358979323846264338327950288
 
+// Attributes
+// ------------------------------------------------------------------------------------
+
 layout( location = 0 ) in vec2 f_uvs;
 
-//globals
+// Uniforms
+// ------------------------------------------------------------------------------------
+
 struct LightData
 {
     vec4 m_light_pos;
@@ -29,14 +34,53 @@ layout( std140, set = 0, binding = 0 ) uniform PerFrameData
     uint      m_number_of_lights;
 } per_frame_data;
 
+// Textures
+// ------------------------------------------------------------------------------------
+
 layout ( set = 0, binding = 1 ) uniform sampler2D i_albedo;
 layout ( set = 0, binding = 2 ) uniform sampler2D i_position_and_depth;
 layout ( set = 0, binding = 3 ) uniform sampler2D i_normal;
 layout ( set = 0, binding = 4 ) uniform sampler2D i_material;
+layout ( set = 0, binding = 5 ) uniform sampler2DArray i_shadow_maps;
 
+// Attachments
+// ------------------------------------------------------------------------------------
 
 layout(location = 0) out vec4 out_color;
 
+// Eval Functions
+// ------------------------------------------------------------------------------------
+
+float evalVisibilitySM(uint lightIndex, vec3 frag_pos){
+    LightData light = per_frame_data.m_lights[lightIndex];
+    vec4 light_space_pos = light.m_view_projection * vec4(frag_pos, 1.0);
+    
+    vec3 projCoords = light_space_pos.xyz / light_space_pos.w;
+    projCoords.xy = projCoords.xy * 0.5 + 0.5;
+
+    float currentDepth = projCoords.z;
+
+    // Without PCF
+    // float sampleDepth = texture(i_shadow_maps, vec3(projCoords.xy, float(lightIndex))).r;
+    // float shadow = (sampleDepth < currentDepth) ? 0.0 : 1.0;
+    
+    // With PCF
+    // https://www.ogldev.org/www/tutorial42/tutorial42.html
+    vec2 texelUnit = 1.0 / vec2(textureSize(i_shadow_maps, 0).xy);
+    float shadow = 0.0;
+    int samples = 0;
+    for (int x = -1; x <= 1; ++x) {
+        for (int y = -1; y <= 1; ++y) {
+            vec2 offset = vec2(x, y) * texelUnit;
+            float sampleDepth = texture(i_shadow_maps, vec3(projCoords.xy + offset, float(lightIndex))).r;
+            shadow += (sampleDepth < currentDepth) ? 0.0 : 1.0;
+            samples++;
+        }
+    }
+    shadow /= float(samples);
+
+    return shadow;
+}
 
 vec3 evalDiffuse()
 {
@@ -109,7 +153,9 @@ vec3 evalMicrofacet()
         
         vec3 l;
         vec3 radiance;
-          // Calculate light direction and radiance based on light type
+        float visibility = 1.0;
+
+        // Calculate light direction and radiance based on light type
         switch(light_type)
         {
             case 0: // directional
@@ -128,6 +174,7 @@ vec3 evalMicrofacet()
                     l = normalize(l);
                     float att = 1.0 / (light.m_attenuattion.x + light.m_attenuattion.y * dist + light.m_attenuattion.z * dist * dist);
                     radiance = light.m_radiance.rgb * att;
+                    visibility = evalVisibilitySM(id_light, frag_pos);
                     break;
                 }
             case 2: // ambient
@@ -167,11 +214,14 @@ vec3 evalMicrofacet()
         vec3 diffuse = (1.0 - metallic) * albedo.rgb / PI;
         
         // Combine diffuse and specular
-        shading += (diffuse + specular) * radiance * NdotL;
+        shading += (diffuse + specular) * radiance * NdotL * visibility;
     }
 
     return shading;
 }
+
+// Main function
+// ------------------------------------------------------------------------------------
 
 void main() 
 {

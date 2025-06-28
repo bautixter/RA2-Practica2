@@ -23,6 +23,7 @@
 #include "vulkan/windowVK.h"
 #include "vulkan/deviceVK.h"
 #include "vulkan/utilsVK.h"
+#include "vulkan/shadowPassVK.h"
 
 // defines for camera rotation
 
@@ -262,6 +263,13 @@ void Engine::createRenderPasses ()
     }
     m_render_passes.clear();
     
+    auto shadow_pass = std::make_shared<ShadowPassVK>(
+        m_runtime,
+        m_render_target_attachments.m_shadow_attachment
+    );
+    shadow_pass->initialize();
+    m_render_passes.push_back(shadow_pass);
+
     auto gbuffer_pass = std::make_shared<DeferredPassVK>(
         m_runtime, 
         m_render_target_attachments.m_depth_attachment, 
@@ -279,6 +287,7 @@ void Engine::createRenderPasses ()
         m_render_target_attachments.m_position_depth_attachment,
         m_render_target_attachments.m_normal_attachment,
         m_render_target_attachments.m_material_attachment,
+        m_render_target_attachments.m_shadow_attachment,
         m_runtime.m_renderer->getWindow().getSwapChainImages()
     );
 
@@ -349,12 +358,13 @@ void Engine::updateGlobalBuffers()
        
         auto light = m_scene->getLights()[ perframe_data.m_number_of_lights ];
 
-        perframe_data.m_lights[ perframe_data.m_number_of_lights ].m_light_pos       = Vector4f( light->m_data.m_position.x   , light->m_data.m_position.y   , light->m_data.m_position.z   , light->m_data.m_type );
-        perframe_data.m_lights[ perframe_data.m_number_of_lights ].m_radiance        = Vector4f( light->m_data.m_radiance.x   , light->m_data.m_radiance.y   , light->m_data.m_radiance.z   , 0.0f                 );
-        perframe_data.m_lights[ perframe_data.m_number_of_lights ].m_attenuattion    = Vector4f( light->m_data.m_attenuation.x, light->m_data.m_attenuation.y, light->m_data.m_attenuation.z, 0.0f                 );
-        perframe_data.m_lights[ perframe_data.m_number_of_lights ].m_view_projection = light->getLightSpaceMatrix(light, const_cast<Camera&>(m_scene->getCamera()));
-    }
 
+        perframe_data.m_lights[ perframe_data.m_number_of_lights ].m_light_pos    = Vector4f( light->m_data.m_position.x   , light->m_data.m_position.y   , light->m_data.m_position.z   , light->m_data.m_type );
+        perframe_data.m_lights[ perframe_data.m_number_of_lights ].m_radiance     = Vector4f( light->m_data.m_radiance.x   , light->m_data.m_radiance.y   , light->m_data.m_radiance.z   , 0.0f                 );
+        perframe_data.m_lights[ perframe_data.m_number_of_lights ].m_attenuattion = Vector4f( light->m_data.m_attenuation.x, light->m_data.m_attenuation.y, light->m_data.m_attenuation.z, 0.0f                 );
+        perframe_data.m_lights[perframe_data.m_number_of_lights].m_view_projection = light->getLightSpaceMatrix(light, const_cast<Camera&>(m_scene->getCamera()));
+
+    }
 
     //material buffers
     void* data;

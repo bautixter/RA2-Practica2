@@ -5,7 +5,8 @@
 
 #define INV_PI 0.31830988618
 #define PI   3.14159265358979323846264338327950288
-#define RTX_ON 0
+
+#define SHADOW_MODE 0 // 0 for shadow mapping, 1 for RTX, 2 for Soft Shadows
 
 // Attributes
 // ------------------------------------------------------------------------------------
@@ -130,6 +131,86 @@ float evalVisibilityRTX(uint lightIndex, vec3 frag_pos) {
     return hit ? 0.0 : 1.0;
 }
 
+// Soft Shadows using Cone Sampling
+// ------------------------------------------------------------------------------------
+
+float hash31(vec3 p) {
+    return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453);
+}
+
+vec3 sampleConeDirection(vec3 baseDir, float coneAperture, float u1, float u2) {
+    // Compute the cosine of the angle from the center
+    float cosTheta = mix(cos(coneAperture), 1.0, u1); // linear interpolation
+    float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
+
+    float phi = 2.0 * 3.14159265 * u2;
+
+    // Local direction in the cone's frame
+    vec3 localDir = vec3(
+        cos(phi) * sinTheta,
+        sin(phi) * sinTheta,
+        cosTheta
+    );
+
+    // Build an orthonormal basis (baseDir is z axis)
+    vec3 up = abs(baseDir.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+    vec3 tangent = normalize(cross(up, baseDir));
+    vec3 bitangent = cross(baseDir, tangent);
+
+    // Transform from local space to world space
+    vec3 worldDir = tangent * localDir.x + bitangent * localDir.y + baseDir * localDir.z;
+
+    return normalize(worldDir);
+}
+
+float evalVisibilitySoftShadows(uint lightIndex, vec3 frag_pos) {
+
+    float t_min       = 0.01;
+    float t_max       = 100.0;
+    float coneAngle   = 0.025;
+    int   numSamples  = 64;
+
+    LightData light = per_frame_data.m_lights[lightIndex];
+    vec4 light_pos = light.m_light_pos;
+    vec3 light_dir = normalize(light_pos.xyz - frag_pos);
+    
+    int count = 0;
+    
+    for (int i = 0; i < numSamples; ++i) {
+        
+        vec3 seed3 = vec3(gl_FragCoord.xy + float(i) * 37.0, float(lightIndex));
+        float u1 = hash31(seed3);
+        float u2 = hash31(seed3 + vec3(7.0, 3.0, 5.0));
+
+        vec3 sample_dir = sampleConeDirection(light_dir, coneAngle, u1, u2);
+
+        rayQueryEXT ray_query;
+
+        rayQueryInitializeEXT(
+            ray_query,
+            i_TLAS,
+            gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT,
+            0xFF,
+            frag_pos,
+            t_min,
+            sample_dir,
+            t_max
+        );
+
+        while(rayQueryProceedEXT(ray_query)) {
+            if(rayQueryGetIntersectionTypeEXT(ray_query, false) == gl_RayQueryCandidateIntersectionTriangleEXT) {
+                rayQueryConfirmIntersectionEXT(ray_query);
+            }
+        }
+
+        if (rayQueryGetIntersectionTypeEXT(ray_query, true) == gl_RayQueryCommittedIntersectionNoneEXT) ++count;
+    }
+
+    float visibility = float(count) / float(numSamples);
+
+    return clamp((visibility - 0.1) / 0.8, 0.0, 1.0);
+}
+
 // Shading Functions
 // ------------------------------------------------------------------------------------
 
@@ -140,6 +221,7 @@ vec3 evalDiffuse()
     vec3  frag_pos     = texture( i_position_and_depth, f_uvs ).xyz; // view space
     vec3  shading = vec3( 0.0 );
 
+    float visibility = 1.0;
 
     for( uint id_light = 0; id_light < per_frame_data.m_number_of_lights; id_light++ )
     {
@@ -169,6 +251,16 @@ vec3 evalDiffuse()
                 vec3 radiance = light.m_radiance.rgb * att;
 
                 shading += max( dot( n, l ), 0.0 ) * albedo.rgb * radiance;
+
+                // Choose shadow evaluation method based on SHADOW_MODE
+                if (SHADOW_MODE == 0) {
+                    visibility = evalVisibilitySM(id_light, frag_pos);
+                } else if (SHADOW_MODE == 1) {
+                    visibility = evalVisibilityRTX(id_light, frag_pos);
+                } else if (SHADOW_MODE == 2) {
+                    visibility = evalVisibilitySoftShadows(id_light, frag_pos);
+                }
+
                 break;
             }
             case 2: //ambient
@@ -179,7 +271,7 @@ vec3 evalDiffuse()
         }
     }
 
-    return shading;
+    return shading * visibility;
 }
 
 vec3 evalMicrofacet()
@@ -225,11 +317,15 @@ vec3 evalMicrofacet()
                     l = normalize(l);
                     float att = 1.0 / (light.m_attenuattion.x + light.m_attenuattion.y * dist + light.m_attenuattion.z * dist * dist);
                     radiance = light.m_radiance.rgb * att;
-#if RTX_ON
-                    visibility = evalVisibilityRTX(id_light, frag_pos);
-#else
-                    visibility = evalVisibilitySM(id_light, frag_pos);
-#endif
+                    
+                    // Choose shadow evaluation method based on SHADOW_MODE
+                    if (SHADOW_MODE == 0) {
+                        visibility = evalVisibilitySM(id_light, frag_pos);
+                    } else if (SHADOW_MODE == 1) {
+                        visibility = evalVisibilityRTX(id_light, frag_pos);
+                    } else if (SHADOW_MODE == 2) {
+                        visibility = evalVisibilitySoftShadows(id_light, frag_pos);
+                    }
                     break;
                 }
             case 2: // ambient
@@ -286,6 +382,26 @@ void main()
     vec4 material_params = texture(i_material, f_uvs);
     float material_type = material_params.g;
 
+    // Get fragment position for ray testing
+    vec3 frag_pos = texture(i_position_and_depth, f_uvs).xyz;
+    
+    // Debug visualization for ray hits
+    // bool rayHit = false;
+    // if (SHADOW_MODE == 1 || SHADOW_MODE == 2) {
+    //     // Test ray hit with the first light (if available)
+    //     if (per_frame_data.m_number_of_lights > 0) {
+    //         LightData light = per_frame_data.m_lights[0];
+    //         uint light_type = uint(floor(light.m_light_pos.a));
+            
+    //         if (light_type == 1) { // Only do this for point lights
+    //             float visibility = SHADOW_MODE == 1 ? 
+    //                 evalVisibilityRTX(0, frag_pos) : 
+    //                 evalVisibilitySoftShadows(0, frag_pos);
+    //             rayHit = visibility < 0.5;
+    //         }
+    //     }
+    // }
+
     vec3 out_eval = vec3(0.0);
     if (material_type == 0.5f) // Diffuse
     {
@@ -295,6 +411,15 @@ void main()
     }
 
     vec3 mapped = vec3( 1.0f ) - exp(-out_eval * exposure);
+    
+    // Apply tint based on ray hit
+    // if (SHADOW_MODE == 1 || SHADOW_MODE == 2) {
+    //     if (rayHit) {
+    //         mapped = mix(mapped, vec3(1.0, 0.0, 0.0), 0.4); // Red tint for hits
+    //     } else {
+    //         mapped = mix(mapped, vec3(0.0, 0.0, 1.0), 0.4); // Blue tint for no hits
+    //     }
+    // }
 
     out_color = vec4( pow( mapped, vec3( 1.0f / gamma ) ), 1.0 );
 }

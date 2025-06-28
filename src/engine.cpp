@@ -11,6 +11,7 @@
 #include "material.h"
 #include "diffuse.h"
 #include "microfacets.h"
+#include "defines.h"
 
 // standard includes
 #include <chrono>
@@ -25,8 +26,6 @@
 #include "vulkan/utilsVK.h"
 #include "vulkan/shadowPassVK.h"
 #include "vulkan/meshVK.h"
-
-// defines for camera rotation
 
 using namespace MiniEngine;
 
@@ -161,10 +160,16 @@ void Engine::run()
 void Engine::shutdown()
 {
     RendererVK& renderer = *m_runtime.m_renderer;
-
-
     vkDeviceWaitIdle( renderer.getDevice()->getLogicalDevice() );
     
+    if (m_tlas != VK_NULL_HANDLE)
+    {
+        vkDestroyAccelerationStructure( renderer.getDevice()->getLogicalDevice(), m_tlas, nullptr );
+        vkFreeMemory( renderer.getDevice()->getLogicalDevice(), m_tlas_memory, nullptr );
+        vkDestroyBuffer( renderer.getDevice()->getLogicalDevice(), m_tlas_buffer, nullptr );
+        m_tlas = VK_NULL_HANDLE;
+    }
+
     m_runtime.freeResources();
 
     if( m_scene )
@@ -328,17 +333,19 @@ void Engine::updateGlobalBuffers()
 {    assert( m_runtime.m_per_frame_buffer[ m_current_frame % 3 ] );
     assert( m_scene );
 
-    //Camera& cam = const_cast<Camera&>(m_scene->getCamera());
-    //
-    //// Time-based rotation for consistent speed regardless of framerate
-    //static auto last_time = std::chrono::high_resolution_clock::now();
-    //auto current_time = std::chrono::high_resolution_clock::now();
-    //float delta_time = std::chrono::duration<float>(current_time - last_time).count();
-    //last_time = current_time;
-    //
-    //// Rotate at 30 degrees per second (consistent regardless of FPS)
-    //float rotation_speed = glm::radians(30.0f); // degrees per second
-    //cam.rotateAroundOrigin(rotation_speed * delta_time);
+    Camera& cam = const_cast<Camera&>(m_scene->getCamera());
+   
+#ifdef  CAMERA_ROTATION
+    // Time-based rotation for consistent speed regardless of framerate
+    static auto last_time = std::chrono::high_resolution_clock::now();
+    auto current_time = std::chrono::high_resolution_clock::now();
+    float delta_time = std::chrono::duration<float>(current_time - last_time).count();
+    last_time = current_time;
+    
+    // Rotate at 30 degrees per second (consistent regardless of FPS)
+    float rotation_speed = glm::radians(10.0f); // degrees per second
+    cam.rotateAroundOrigin(rotation_speed * delta_time);
+#endif //  CAMERA_ROTATION
 
     //global settings
     PerFrameData perframe_data;

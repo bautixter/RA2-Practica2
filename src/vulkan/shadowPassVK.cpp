@@ -313,7 +313,7 @@ void ShadowPassVK::createPipelines()
     raster_info.cullMode                = VK_CULL_MODE_NONE;
     raster_info.frontFace               = VK_FRONT_FACE_CLOCKWISE;
     raster_info.depthBiasEnable         = VK_TRUE;  // Enable depth bias for shadow mapping: prevents shadow acne
-    raster_info.depthBiasConstantFactor = 1.25f;    // Constant depth offset - helps with surface acne
+    raster_info.depthBiasConstantFactor = 1.0f;     // Constant depth offset
     raster_info.depthBiasClamp          = 0.0f;     // Maximum bias value (0.0 = no limit)
     raster_info.depthBiasSlopeFactor    = 1.75f;    // Slope-dependent bias
     raster_info.lineWidth               = 1.f;

@@ -5,7 +5,7 @@
 
 #define INV_PI 0.31830988618
 #define PI   3.14159265358979323846264338327950288
-#define RTX_ON 1
+#define RTX_ON 0
 
 // Attributes
 // ------------------------------------------------------------------------------------
@@ -65,11 +65,16 @@ float evalVisibilitySM(uint lightIndex, vec3 frag_pos){
     float currentDepth = projCoords.z;
 
     // Without PCF
+    // .....................................................................................
+
     // float sampleDepth = texture(i_shadow_maps, vec3(projCoords.xy, float(lightIndex))).r;
     // float shadow = (sampleDepth < currentDepth) ? 0.0 : 1.0;
     
     // With PCF
+    // .....................................................................................
+    
     // https://www.ogldev.org/www/tutorial42/tutorial42.html
+
     vec2 texelUnit = 1.0 / vec2(textureSize(i_shadow_maps, 0).xy);
     float shadow = 0.0;
     int samples = 0;

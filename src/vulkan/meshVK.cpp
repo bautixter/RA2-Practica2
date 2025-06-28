@@ -21,6 +21,7 @@ MeshVK::MeshVK( const Runtime& i_runtime, const std::string& i_path, const std::
 }
 
 
+
 bool MeshVK::initialize()
 {
     assert( !m_indices.empty() && !m_vertices.empty() );
@@ -44,7 +45,7 @@ bool MeshVK::initialize()
     if( !m_indices.empty() && !m_vertices.empty() )
     {
         UtilsVK::createBLAS(*m_runtime.m_renderer->getDevice(), m_data_buffer, m_indices_buffer, m_vertices, m_indices, m_blas, m_blas_buffer, m_blas_memory );
-        UtilsVK::setObjectName( m_runtime.m_renderer->getDevice()->getLogicalDevice(), (uint64_t)m_blas, VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_EXT, "BLAS Buffer" );
+        UtilsVK::setObjectName(m_runtime.m_renderer->getDevice()->getLogicalDevice(), (uint64_t)m_blas, VK_DEBUG_REPORT_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR_EXT, "BLAS object");
     }
 
     return true;

@@ -22,6 +22,10 @@ namespace MiniEngine
                           );
         virtual ~CompositionPassVK();
 
+        inline void setTLAS(VkAccelerationStructureKHR i_tlas) {
+            m_tlas = i_tlas;
+        }
+
         bool            initialize() override;
         void            shutdown  () override;
         VkCommandBuffer draw      ( const Frame& i_frame ) override;
@@ -35,6 +39,7 @@ namespace MiniEngine
         void createPipelines       ();
         void createDescriptorLayout();
         void createDescriptors     ();
+        void updateTLASDescriptor  (); // New method to update TLAS descriptor
 
         struct DescriptorsSets
         {
@@ -61,5 +66,7 @@ namespace MiniEngine
         ImageBlock m_in_material_attachment;
         ImageBlock m_in_shadow_attachment;
         std::array<ImageBlock, 3> m_output_swap_images;
+
+        VkAccelerationStructureKHR m_tlas;
     };
 };

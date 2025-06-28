@@ -418,7 +418,6 @@ void CompositionPassVK::createPipelines()
     createDescriptors();
 }
 
-
 void CompositionPassVK::createDescriptorLayout()
 {
     std::array<VkDescriptorSetLayoutBinding, 7> layout_bindings;
@@ -460,12 +459,11 @@ void CompositionPassVK::createDescriptorLayout()
     layout_bindings[ 5 ].descriptorType               = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     layout_bindings[ 5 ].stageFlags                   = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-
-    layout_bindings[ 5 ] = {};
-    layout_bindings[ 5 ].binding                      = 6;
-    layout_bindings[ 5 ].descriptorCount              = 1;
-    layout_bindings[ 5 ].descriptorType               = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
-    layout_bindings[ 5 ].stageFlags                   = VK_SHADER_STAGE_FRAGMENT_BIT;
+    layout_bindings[ 6 ] = {};
+    layout_bindings[ 6 ].binding                      = 6;
+    layout_bindings[ 6 ].descriptorCount              = 1;
+    layout_bindings[ 6 ].descriptorType               = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+    layout_bindings[ 6 ].stageFlags                   = VK_SHADER_STAGE_FRAGMENT_BIT;
 
     VkDescriptorSetLayoutCreateInfo set_attachment_color_info = {};
     set_attachment_color_info.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -480,14 +478,14 @@ void CompositionPassVK::createDescriptorLayout()
     }
 }
 
-
 void CompositionPassVK::createDescriptors()
 {
     //create a descriptor pool that will hold 10 uniform buffers
     std::vector<VkDescriptorPoolSize> sizes =
     {
-        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER        , 10 },
-        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10 }
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER            , 10 },
+        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER    , 10 },
+        { VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 10 }
     };
 
     VkDescriptorPoolCreateInfo pool_info = {};
@@ -506,7 +504,7 @@ void CompositionPassVK::createDescriptors()
     VkWriteDescriptorSetAccelerationStructureKHR writeDescriptorSetAccelerationStructure = {};
     writeDescriptorSetAccelerationStructure.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
     writeDescriptorSetAccelerationStructure.accelerationStructureCount = 1;
-    writeDescriptorSetAccelerationStructure.pAccelerationStructures = m_runtime.m_tlas.get();
+    writeDescriptorSetAccelerationStructure.pAccelerationStructures = &m_tlas;
 
     //create descriptors for the global buffers
     for( uint32_t i = 0; i < m_runtime.m_renderer->getWindow().getImageCount(); i++ )
@@ -549,7 +547,7 @@ void CompositionPassVK::createDescriptors()
         image_infos[ 4 ].imageView   = m_in_shadow_attachment.m_image_view;
         image_infos[ 4 ].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-        std::array<VkWriteDescriptorSet, 6> set_write;
+        std::array<VkWriteDescriptorSet, 7> set_write;
 
         set_write[ 0 ]                   = {};
         set_write[ 0 ].sType             = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;

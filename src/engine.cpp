@@ -181,24 +181,6 @@ void Engine::shutdown()
     m_runtime.m_shader_registry->shutdown();
 
     m_runtime.m_renderer->shutdown();
-
-    // TLAS Destruction
-    
-    if (m_runtime.m_tlas)
-    {
-        vkDestroyAccelerationStructure(renderer.getDevice()->getLogicalDevice(), *m_runtime.m_tlas, nullptr);
-        m_runtime.m_tlas.reset();
-    }
-    if (m_runtime.m_tlas_buffer)
-    {
-        vkDestroyBuffer(renderer.getDevice()->getLogicalDevice(), *m_runtime.m_tlas_buffer, nullptr);
-        m_runtime.m_tlas_buffer.reset();
-    }
-    if (m_runtime.m_tlas_memory)
-    {
-        vkFreeMemory(renderer.getDevice()->getLogicalDevice(), *m_runtime.m_tlas_memory, nullptr);
-        m_runtime.m_tlas_memory.reset();
-    }
 }
 
 
@@ -310,10 +292,10 @@ void Engine::createRenderPasses ()
         m_runtime.m_renderer->getWindow().getSwapChainImages()
     );
 
+    composition_pass->setTLAS(m_tlas);
     composition_pass->initialize();
 
     m_render_passes.push_back( composition_pass );
-
 
     if( m_scene )
     {
@@ -404,9 +386,9 @@ void Engine::updateGlobalBuffers()
         *m_runtime.m_renderer->getDevice(),
         transformMatrices,
         blasVector,
-        *m_runtime.m_tlas,
-        *m_runtime.m_tlas_buffer,
-        *m_runtime.m_tlas_memory
+        m_tlas,
+        m_tlas_buffer,
+        m_tlas_memory
     );
 
     // Material Buffers

@@ -1,8 +1,11 @@
 #version 460
 
 #extension GL_ARB_shader_draw_parameters : enable
+#extension GL_EXT_ray_query : enable
+
 #define INV_PI 0.31830988618
 #define PI   3.14159265358979323846264338327950288
+#define RTX_ON 1
 
 // Attributes
 // ------------------------------------------------------------------------------------
@@ -42,13 +45,14 @@ layout ( set = 0, binding = 2 ) uniform sampler2D i_position_and_depth;
 layout ( set = 0, binding = 3 ) uniform sampler2D i_normal;
 layout ( set = 0, binding = 4 ) uniform sampler2D i_material;
 layout ( set = 0, binding = 5 ) uniform sampler2DArray i_shadow_maps;
+layout ( set = 0, binding = 6 ) uniform accelerationStructureEXT i_TLAS;
 
 // Attachments
 // ------------------------------------------------------------------------------------
 
 layout(location = 0) out vec4 out_color;
 
-// Eval Functions
+// Shadow Mapping Visibility Evaluation
 // ------------------------------------------------------------------------------------
 
 float evalVisibilitySM(uint lightIndex, vec3 frag_pos){
@@ -81,6 +85,48 @@ float evalVisibilitySM(uint lightIndex, vec3 frag_pos){
 
     return shadow;
 }
+
+// RTX Visibility Evaluation
+// ------------------------------------------------------------------------------------
+
+// Official documentation on:
+// -> https://www.khronos.org/blog/ray-tracing-in-vulkan
+// -> https://github.com/KhronosGroup/GLSL/blob/main/extensions/ext/GLSL_EXT_ray_query.txt
+
+float evalVisibilityRTX(uint lightIndex, vec3 frag_pos) {
+    LightData light = per_frame_data.m_lights[lightIndex];
+    vec4 light_pos = light.m_light_pos;
+    vec3 light_dir = light_pos.xyz - frag_pos;
+
+    rayQueryEXT ray_query;
+    rayQueryInitializeEXT(
+        ray_query,          // Ray query object
+        i_TLAS,             // TLAS     
+        gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT, // Ray flags
+        0xFF,               // Culling mask
+        frag_pos,           // Ray origin
+        0.001,              // Ray tMin (prevents self-intersection!)
+        light_dir,          // Ray direction
+        length(light_dir)   // Ray tMax (length of the ray)
+    );
+
+    bool hit = false;
+
+    while(rayQueryProceedEXT(ray_query)) {
+        if(rayQueryGetIntersectionTypeEXT(ray_query, false) == gl_RayQueryCandidateIntersectionTriangleEXT) {
+            rayQueryConfirmIntersectionEXT(ray_query);
+        }
+    }
+
+    if (rayQueryGetIntersectionTypeEXT(ray_query, true) != gl_RayQueryCommittedIntersectionNoneEXT) {
+        hit = true;
+    }
+
+    return hit ? 0.0 : 1.0;
+}
+
+// Shading Functions
+// ------------------------------------------------------------------------------------
 
 vec3 evalDiffuse()
 {
@@ -174,7 +220,11 @@ vec3 evalMicrofacet()
                     l = normalize(l);
                     float att = 1.0 / (light.m_attenuattion.x + light.m_attenuattion.y * dist + light.m_attenuattion.z * dist * dist);
                     radiance = light.m_radiance.rgb * att;
+#if RTX_ON
+                    visibility = evalVisibilityRTX(id_light, frag_pos);
+#else
                     visibility = evalVisibilitySM(id_light, frag_pos);
+#endif
                     break;
                 }
             case 2: // ambient

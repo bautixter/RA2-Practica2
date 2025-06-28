@@ -25,7 +25,6 @@ include_directories(
 	libs/tinyobjloader
 	)
 
-
 add_executable(Practica5
 #INCLUDES
 include/defines.h

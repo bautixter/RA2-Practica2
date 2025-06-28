@@ -59,5 +59,9 @@ namespace MiniEngine
         
         Attachments m_render_target_attachments;
         std::array<VkSampler, 1> m_global_samplers;
+
+        VkAccelerationStructureKHR m_tlas = VK_NULL_HANDLE;
+        VkBuffer                   m_tlas_buffer = VK_NULL_HANDLE;
+        VkDeviceMemory             m_tlas_memory = VK_NULL_HANDLE;
     };
 };
